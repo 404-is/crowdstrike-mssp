@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>API Connection Test</title>
+<style>
+  body { font-family: monospace; background: #0a0a0f; color: #e0e0e0; padding: 30px; }
+  h2 { color: #00d4ff; }
+  .ok  { color: #00e676; font-weight: bold; }
+  .err { color: #e8001d; font-weight: bold; }
+  .warn{ color: #ff9500; font-weight: bold; }
+  pre  { background: #1a1a2e; padding: 15px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+  button { background: #00d4ff; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-family: monospace; font-size: 14px; border-radius: 3px; margin: 5px; }
+</style>
+</head>
+<body>
+<h2>🔌 FalconGuard API Connection Diagnostics</h2>
+<p>This page tests every possible connection issue.</p>
+
+<button onclick="runAll()">▶ Run All Tests</button>
+<button onclick="document.getElementById('out').innerHTML=''">Clear</button>
+
+<pre id="out">Click "Run All Tests" to begin...</pre>
+
+<script>
+const BACKEND = 'http://127.0.0.1:8000';
+
+function log(msg, cls) {
+  const pre = document.getElementById('out');
+  const span = document.createElement('span');
+  span.className = cls || '';
+  span.textContent = msg + '\n';
+  pre.appendChild(span);
+}
+
+async function test(label, url, opts) {
+  log('──────────────────────────────────');
+  log('TEST: ' + label);
+  log('URL:  ' + url);
+  try {
+    const start = Date.now();
+    const r = await fetch(url, opts || {signal: AbortSignal.timeout(5000)});
+    const ms = Date.now() - start;
+    const text = await r.text();
+    if (r.ok) {
+      log('STATUS: ' + r.status + ' OK  (' + ms + 'ms)', 'ok');
+      log('RESPONSE: ' + text.substring(0, 200));
+    } else {
+      log('STATUS: ' + r.status + ' FAILED', 'err');
+      log('BODY: ' + text.substring(0, 200));
+    }
+    // Log CORS headers
+    const cors = r.headers.get('access-control-allow-origin');
+    log('CORS header: ' + (cors || '(none)'), cors ? 'ok' : 'warn');
+  } catch(e) {
+    log('ERROR: ' + e.name + ' — ' + e.message, 'err');
+    if (e.name === 'TypeError') {
+      log('→ This means: network blocked, CORS preflight failed, or server not running', 'warn');
+    }
+    if (e.name === 'TimeoutError') {
+      log('→ This means: server running but not responding within 5s', 'warn');
+    }
+  }
+}
+
+async function runAll() {
+  document.getElementById('out').innerHTML = '';
+  log('Starting diagnostics at ' + new Date().toISOString(), 'ok');
+  log('Page origin: ' + window.location.origin);
+  log('Browser: ' + navigator.userAgent.substring(0, 60));
+
+  await test('Health check (GET /health)', BACKEND + '/health');
+  await test('API docs root (GET /)', BACKEND + '/');
+  await test('Overview (GET /api/v1/overview)', BACKEND + '/api/v1/overview');
+  await test('AI health (GET /api/v1/ai/health)', BACKEND + '/api/v1/ai/health');
+
+  log('──────────────────────────────────');
+  log('Done. Check results above.', 'ok');
+  log('If all show TypeError/network errors:');
+  log('  → Backend is NOT running. Start it: python -m uvicorn main:app --reload', 'warn');
+  log('If health shows 200 but others fail:');
+  log('  → CORS or route issue', 'warn');
+}
+</script>
+</body>
+</html>
